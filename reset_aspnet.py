@@ -41,6 +41,24 @@ def __main__():
     # pass
     return 0
   if (options.list_sites):
+    sites = c.IIsWebVirtualDirSetting()
+    #print foo[0]
+    src_dirs = []
+    log_dirs = []
+    for item in sites:
+      src_dir = str(item.Path).strip().lower()# .replace("c:\\www\\","")
+      if src_dir not in src_dirs:
+        src_dirs.append(src_dir)
+      log_dir = str(item.Name).strip().lower()
+      if log_dir not in log_dirs:
+        log_dirs.append(log_dir)
+    
+    src_dirs.sort()
+    
+    for entry in src_dirs:
+      print entry    
+    #for item in sites:
+    #  print item
     # pass
     return 0
 
