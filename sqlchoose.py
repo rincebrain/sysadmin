@@ -17,6 +17,12 @@ MAX_DAYS = 90
 guaranteed to trigger a full backup."""
 MAGIC_TIME = 900000000
 
+TDPSQL="%ProgramFiles%\\Tivoli\\TSM\\TDPSql\\TDPSQLc.exe"
+
+"""The special-cased databases which always get full backups.
+"""
+SPECIAL_CASES=["master"]
+
 class sqldb:
   """A SQL database.
   
@@ -66,12 +72,19 @@ class sqlhost(object):
 
 def get_dblist(host):
   # Ignore host for now, setting up for next version
-  # system(tdpsql query sql * parse)
+  # system(tdpsql query sql *)
+  # parse
   # strip periods and spaces from left hand side, split to k-v
   # return list of [[db_name,db_space_alloc,db_space_used,db_log_alloc,db_log_used,db_options],...]
+  try:
+    _tmp = os.popen3("%s query SQL *" % TDPSQL)
+    
+  except:
+    raise RuntimeError("Unable to query SQL databases on host!")
   pass
 
 # get last time of update for a db on a host
+# returns number of days
 def get_last_update(host,db_name):
   # Ignore host variable for now, setting up for next version
   # Should be a single query against the SQL DB on the client
@@ -87,6 +100,12 @@ def get_last_updates(host):
     last_update[db] = get_last_update(host,db["db_name"])
   return last_update
 
+def do_full_update(host="",dbname):
+  pass
+
+def do_inc_update(host="",dbname):
+  pass
+
 def main():
   inc_update = []
   full_update = []
@@ -94,33 +113,39 @@ def main():
   host = socket.gethostname()
   # 
   sql_server = sqlhost(host)
-  # cd %PROGDIR%\tivoli\tsm\tdpsql or die()
-  # rand = new Random()
-  # rand.seed()
-  # dbs = get_dblist()
-  # for db in dbs:
-  #   db_name = db["db_name"]
-  #   # special case master
-  #   if db_name is "master":
-  #     full_update.append(db_name)
-  #	continue
-  #   last_updated = get_last_update(db_name)
-  #   # If never backed up
-  #   if last_updated == -1:
-  #	full_update.append(db_name)
-  #   else:
-  #	# Weighting
-  #	p_mass = last_updated**2
-  #	rand_num = rand.randint(0,MAX_DAYS+1)**2
-  #	# If our random number is within the range of [0,p_mass],
-  #	# we do a full backup - otherwise, incremental.
-  #	if (p_mass >= rand_num):
-  #	   full_update.append(db_name)
-  #	else:
-  #	   inc_update.append(db_name)
+  
+  #touch SQLPATH or die()
+  rand = new Random()
+  rand.seed()
+  dbs = get_dblist()
+  for db in dbs:
+     db_name = db["db_name"]
+     # special case master
+     #if db_name in special_cases:
+       #full_update.append(db_name)
+      # continue
+     last_updated = get_last_update(db_name)
+     # If never backed up
+     if last_updated == -1:
+       full_update.append(db_name)
+     else:
+       # Weighting
+       # Just naive 
+       p_mass = (double(last_updated)/(MAX_DAYS))**2.0
+       rand_num = rand.randint(0,MAX_DAYS+1)
+       # If our random number is within the range of [0,p_mass],
+       # we do a full backup - otherwise, incremental.
+       if (p_mass >= rand_num):
+         full_update.append(db_name)
+       else:
+         if db_name not in special_cases:
+           inc_update.append(db_name)
+  for db in full_update:
+    do_full_update(dbname=db)
+  for db in inc_update:
+    do_inc_update(dbname=db)
   # call the full update script with the list of fulls
   # call the incremental update script with the list of incrementals
-  pass
 
 if __name__ is "__main__":
   main()
