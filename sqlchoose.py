@@ -241,7 +241,7 @@ def main():
        rand_num = rand.randint(0,MAX_DAYS+1)
        # If our random number is within the range of [0,p_mass],
        # we do a full backup - otherwise, incremental.
-       if (p_mass >= rand_num):
+       if (p_mass >= rand_num) or db_name in SPECIAL_CASES:
 #         print "Probabilistic full back
          full_update.append(db_name)
        else:
