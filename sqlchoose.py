@@ -8,7 +8,7 @@ __author__   = "Rich Ercolani, rercola@acm.jhu.edu"
 __version__  = "0.0.1"
 
 
-import sys,os,random,socket,time
+import sys,os,random,socket,time,re
 
 # maximum time between full backups
 MAX_DAYS = 90
@@ -17,7 +17,7 @@ MAX_DAYS = 90
 guaranteed to trigger a full backup."""
 MAGIC_TIME = 900000000
 
-TDPSQL="%ProgramFiles%\\Tivoli\\TSM\\TDPSql\\TDPSQLc.exe"
+TDPSQL="C:\\Program Files\\Tivoli\\TSM\\TDPSql\\TDPSQLc.exe"
 
 """The special-cased databases which always get full backups.
 """
@@ -70,25 +70,76 @@ class sqlhost(object):
   def __repr__(self):
     return self.hostname
 
+"""A command to extract the bits you care about from
+a TDPSQLC query SQL * command and hand them back as a list.
+Looks like
+[[hostname],
+[db_name,db_space_alloc,db_space_used,db_log_alloc,db_log_used,db_options],
+[db_name,db_space_alloc,db_space_used,db_log_alloc,db_log_used,db_options],
+...]"""
+def parse_tdpsql_dbs(lines):
+    # Whee, state machine time
+    _tmpdb = {}
+    dbs = []
+    extractor = re.compile("^(?P<key>.+) (\.+) (?P<value>.+)$")
+    kv_map = {"SQL Database Name":"db_name","SQL Database Data Space Allocated":"db_space_alloc","SQL Database Data Space Used":"db_space_used","SQL Database Log Space Allocated":"db_log_alloc","SQL Database Log Space Used":"db_log_used","SQL Database Options":"db_options"}
+    
+    for line in lines:
+      line = str.strip(line)
+      if len(line) == 0:
+        if len(_tmpdb.keys()) != 0:
+          dbs.append(_tmpdb)
+          _tmpdb = {}
+      found = extractor.match(line)
+      if found is not None:      
+        _k = str.strip(found.group("key"))
+        _v = str.strip(found.group("value"))
+#        print "(%s,%s)" % (_k,_v)
+        if _k == "SQL Server Name":
+          dbs.append([_v])
+          continue
+        if _k in kv_map.keys():
+          # If we see this, we're on a new DB, append the old one if any
+          if kv_map[_k] == "db_name" and len(_tmpdb.keys()) != 0:
+            dbs.append(_tmpdb)
+            _tmpdb = {}
+          _tmpdb[kv_map[_k]] = _v
+          continue
+        print "(%s,%s)" % (_k,_v)
+        #sys.exit(-1)
+      else:
+        #print "Not Match: %s" %line
+        continue
+    if len(_tmpdb.keys()) != 0:
+      dbs.append(_tmpdb)
+      _tmpdb = {}
+    return dbs
+
 def get_dblist(host):
+  #print "Bees"
   # Ignore host for now, setting up for next version
   # system(tdpsql query sql *)
   # parse
   # strip periods and spaces from left hand side, split to k-v
   # return list of [[db_name,db_space_alloc,db_space_used,db_log_alloc,db_log_used,db_options],...]
-  try:
-    _tmp = os.popen3("%s query SQL *" % TDPSQL)
+  #try:
+    foo = os.path.dirname(TDPSQL)
+    #print foo
+    os.chdir(foo)
+    _tmp = os.popen3("\"%s\" query SQL *" % TDPSQL)[1].readlines()
     
-  except:
-    raise RuntimeError("Unable to query SQL databases on host!")
-  pass
+    return parse_tdpsql_dbs(_tmp)[1:]
+          
+    
+  #except:
+  #  raise RuntimeError("Unable to query SQL databases on host!")
 
 # get last time of update for a db on a host
 # returns number of days
 def get_last_update(host,db_name):
   # Ignore host variable for now, setting up for next version
   # Should be a single query against the SQL DB on the client
-  pass
+  return -1
 
 def get_last_updates(host):
   dbs = get_dblist(host)
@@ -100,10 +151,12 @@ def get_last_updates(host):
     last_update[db] = get_last_update(host,db["db_name"])
   return last_update
 
-def do_full_update(host="",dbname):
+def do_full_update(dbname,host=""):
+  print "Full update on DB %s on host %s" % (dbname,host)
   pass
 
-def do_inc_update(host="",dbname):
+def do_inc_update(dbname,host=""):
+  print "Inc update on DB %s on host %s" % (dbname,host)
   pass
 
 def main():
@@ -115,16 +168,16 @@ def main():
   sql_server = sqlhost(host)
   
   #touch SQLPATH or die()
-  rand = new Random()
+  rand = random.Random()
   rand.seed()
-  dbs = get_dblist()
+  dbs = get_dblist(host)
   for db in dbs:
      db_name = db["db_name"]
      # special case master
      #if db_name in special_cases:
        #full_update.append(db_name)
       # continue
-     last_updated = get_last_update(db_name)
+     last_updated = get_last_update(host,db_name)
      # If never backed up
      if last_updated == -1:
        full_update.append(db_name)
@@ -141,11 +194,11 @@ def main():
          if db_name not in special_cases:
            inc_update.append(db_name)
   for db in full_update:
-    do_full_update(dbname=db)
+    do_full_update(dbname=db,host=host)
   for db in inc_update:
-    do_inc_update(dbname=db)
+    do_inc_update(dbname=db,host=host)
   # call the full update script with the list of fulls
   # call the incremental update script with the list of incrementals
 
-if __name__ is "__main__":
+if __name__ == "__main__":
   main()
