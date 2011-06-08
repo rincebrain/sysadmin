@@ -154,9 +154,9 @@ def parse_tdpsql_updates(lines):
         if _k in kv_map.keys():
           # If we see this, we're on a new DB, append the old one if any
           if kv_map[_k] == "server_name" and len(_tmpdb.keys()) != 0:
-            if _tmpdb["b_type"]
-            dbs.append(_tmpdb)
-            _tmpdb = {}
+            if _tmpdb["b_type"] == "Full":
+              dbs.append(_tmpdb)
+              _tmpdb = {}
           _tmpdb[kv_map[_k]] = _v
           continue
         print "(%s,%s)" % (_k,_v)
@@ -197,12 +197,15 @@ def get_last_updates(db_name,host=""):
     return db_times
 
 def do_full_update(dbname,host=""):
-  print "Full update on DB %s on host %s" % (dbname,host)
-  pass
+#  print "Full update on DB %s on host %s" % (dbname,host)
+  foo = "FILLERFILLERFILLER\\tdpsqlc backup %s full /tsmoptfile=FILLERFILLERFILLER\\dsm.opt /logfile=FILLERFILLERFILLER\\sqlfull.log >> FILLERFILLERFILLER\\sqlfullsched.log" % dbname
+  foo = foo.replace("FILLERFILLERFILLER",os.path.dirname(TDPSQL))
+  print foo
 
 def do_inc_update(dbname,host=""):
-  print "Inc update on DB %s on host %s" % (dbname,host)
-  pass
+  foo = "FILLERFILLERFILLER\\tdpsqlc backup %s diff /tsmoptfile=FILLERFILLERFILLER\\dsm.opt /logfile=FILLERFILLERFILLER\\sqldiff.log >> FILLERFILLERFILLER\\sqldiffsched.log" % dbname
+  foo = foo.replace("FILLERFILLERFILLER",os.path.dirname(TDPSQL))
+  print foo
 
 def main():
   inc_update = []
