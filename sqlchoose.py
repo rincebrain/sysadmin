@@ -8,7 +8,7 @@ __author__   = "Rich Ercolani, rercola@acm.jhu.edu"
 __version__  = "0.0.1"
 
 
-import sys,os,random,socket,time,re
+import sys,os,random,socket,time,re,datetime
 
 # maximum time between full backups
 MAX_DAYS = 90
@@ -115,8 +115,7 @@ def parse_tdpsql_dbs(lines):
       _tmpdb = {}
     return dbs
 
-def get_dblist(host):
-  #print "Bees"
+def get_dblist(host=""):
   # Ignore host for now, setting up for next version
   # system(tdpsql query sql *)
   # parse
@@ -134,22 +133,68 @@ def get_dblist(host):
   #except:
   #  raise RuntimeError("Unable to query SQL databases on host!")
 
+def parse_tdpsql_updates(lines):
+    # Whee, state machine time
+    _tmpdb = {}
+    dbs = []
+    extractor = re.compile("^(?P<key>.+) (\.+) (?P<value>.+)$")
+    kv_map = {"SQL Server Name":"server_name","SQL Database Name":"db_name","Backup Method":"b_method","Backup Location":"b_location","Backup Object Type":"b_type","Backup Object State":"b_state","Backup Creation Date / Time":"b_datetime","Backup Size":"b_size","Database Object Name":"db_obj_name","Number of stripes in backup object":"b_stripes","Assigned Management Class":"b_class"}
+    
+    for line in lines:
+      line = str.strip(line)
+      if len(line) == 0:
+        if len(_tmpdb.keys()) != 0:
+          dbs.append(_tmpdb)
+          _tmpdb = {}
+      found = extractor.match(line)
+      if found is not None:      
+        _k = str.strip(found.group("key"))
+        _v = str.strip(found.group("value"))
+#        print "(%s,%s)" % (_k,_v)
+        if _k in kv_map.keys():
+          # If we see this, we're on a new DB, append the old one if any
+          if kv_map[_k] == "server_name" and len(_tmpdb.keys()) != 0:
+            if _tmpdb["b_type"]
+            dbs.append(_tmpdb)
+            _tmpdb = {}
+          _tmpdb[kv_map[_k]] = _v
+          continue
+        print "(%s,%s)" % (_k,_v)
+        #sys.exit(-1)
+      else:
+        #print "Not Match: %s" %line
+        continue
+    if len(_tmpdb.keys()) != 0:
+      dbs.append(_tmpdb)
+      _tmpdb = {}
+    return dbs
+
 # get last time of update for a db on a host
 # returns number of days
-def get_last_update(host,db_name):
+def get_last_updates(db_name,host=""):
   # Ignore host variable for now, setting up for next version
   # Should be a single query against the SQL DB on the client
-  return -1
-
-def get_last_updates(host):
-  dbs = get_dblist(host)
-  last_update = {}
-  for db in dbs:
-    if db in last_update.keys:
-      # fail
-      print "DB %s found already in last_update list!" % db["db_name"]
-    last_update[db] = get_last_update(host,db["db_name"])
-  return last_update
+    foo = os.path.dirname(TDPSQL)
+    #print foo
+    os.chdir(foo)
+    _tmp = os.popen3("\"%s\" query TSM * /ACTIVE" % TDPSQL)[1].readlines()
+    
+    raw_parse = parse_tdpsql_updates(_tmp)
+    
+    db_times = {}
+    # Yes I know TSM has 5 d/t formats. I should make this explicitly ask for one or handle all five. BLEH.
+    dt_re = re.compile("^(?P<month>[0-9]+)/(?P<day>[0-9]+)/(?P<year>[0-9]+)(\s+)(?P<hour>[0-9]+):(?P<minute>[0-9]+):(?P<second>[0-9]+)$")
+    for entry in raw_parse:
+      #print entry["db_name"]
+      #print entry["b_datetime"]
+      dt_extract = dt_re.match(entry["b_datetime"])
+      dt_obj = datetime.date(int(dt_extract.group("year")),int(dt_extract.group("month")),int(dt_extract.group("day")))# ,dt_extract.group("hour"),dt_extract.group("minute"),dt_extract.group("second"))
+      #print dt_obj
+      dt_today = datetime.date.today()
+      #print dt_today - dt_obj
+      
+      db_times[entry["db_name"]] = (dt_today - dt_obj).days
+    return db_times
 
 def do_full_update(dbname,host=""):
   print "Full update on DB %s on host %s" % (dbname,host)
@@ -171,27 +216,36 @@ def main():
   rand = random.Random()
   rand.seed()
   dbs = get_dblist(host)
-  for db in dbs:
-     db_name = db["db_name"]
+  last_updates = get_last_updates(host)
+  last_updated = -1
+  for db in last_updates.keys():
+     db_name = db
      # special case master
      #if db_name in special_cases:
        #full_update.append(db_name)
       # continue
-     last_updated = get_last_update(host,db_name)
+     if db_name not in last_updates.keys():
+       last_updated = -1
+     else:
+       last_updated = int(last_updates[db_name])
      # If never backed up
+     if last_updated == None:
+       last_updated = -1
      if last_updated == -1:
        full_update.append(db_name)
      else:
        # Weighting
        # Just naive 
-       p_mass = (double(last_updated)/(MAX_DAYS))**2.0
+       p_mass = ((float(last_updated)/(MAX_DAYS))**2.0) * MAX_DAYS
+       #print "(%s,%f)" % (db_name,p_mass)
        rand_num = rand.randint(0,MAX_DAYS+1)
        # If our random number is within the range of [0,p_mass],
        # we do a full backup - otherwise, incremental.
        if (p_mass >= rand_num):
+#         print "Probabilistic full back
          full_update.append(db_name)
        else:
-         if db_name not in special_cases:
+         if db_name not in SPECIAL_CASES:
            inc_update.append(db_name)
   for db in full_update:
     do_full_update(dbname=db,host=host)
